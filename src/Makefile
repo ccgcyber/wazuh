@@ -47,13 +47,13 @@ endif
 OSSEC_LDFLAGS=-L${EXTERNAL_OPENSSL} -L$(EXTERNAL_JSON) -lcjson -lm -lssl -lcrypto ${LDFLAGS}
 
 ifneq (${TARGET},winagent)
-		OSSEC_LDFLAGS+=-L$(EXTERNAL_SQLITE) -lsqlite3 -Wl,-rpath,../lib
+		OSSEC_LDFLAGS+=-L$(EXTERNAL_SQLITE) -lsqlite3
 ifeq (${uname_S},Linux)
 		DEFINES+=-DINOTIFY_ENABLED -D_XOPEN_SOURCE=600 -D_GNU_SOURCE
 #		DEFINES+=-DUSE_MAGIC
 		OSSEC_LDFLAGS+=-pthread -lrt -ldl
 		OSSEC_LDFLAGS+=-L${EXTERNAL_LIBDB}.libs -ldb-6.2
-		OSSEC_LDFLAGS+=-Wl,-rpath,${PREFIX}/lib
+		OSSEC_LDFLAGS+='-Wl,-rpath,$$ORIGIN/../lib'
 #		OSSEC_LDFLAGS+=-lmagic
 		CFLAGS+=-Wl,--start-group
 else
@@ -61,6 +61,7 @@ ifeq (${uname_S},AIX)
 		DEFINES+=-DAIX
 		DEFINES+=-DHIGHFIRST
 		PATH:=${PATH}:/usr/vac/bin
+		OSSEC_LDFLAGS+='-Wl,-rpath,$$ORIGIN/../lib'
 		OSSEC_LDFLAGS+=-pthread
 		CC=gcc
 else
@@ -71,6 +72,7 @@ ifeq (${uname_S},SunOS)
 		CFLAGS+=-Wl,--start-group
 		OSSEC_LDFLAGS+=-Wl,--end-group
 		OSSEC_LDFLAGS+=-z relax=secadj
+		OSSEC_LDFLAGS+='-Wl,-rpath,$$ORIGIN/../lib'
 		OSSEC_LDFLAGS+=-lsocket -lnsl -lresolv
 		PATH:=${PATH}:/usr/ccs/bin:/usr/xpg4/bin:/opt/csw/gcc3/bin:/opt/csw/bin:/usr/sfw/bin
 		CC=gcc
@@ -80,24 +82,28 @@ else
 ifeq (${uname_S},Darwin)
 		DEFINES+=-DDarwin
 		DEFINES+=-DHIGHFIRST
+		OSSEC_LDFLAGS+=-Xlinker -rpath -Xlinker "@executable_path/../lib"
 		SHARED=dylib
 else
 ifeq (${uname_S},FreeBSD)
 		DEFINES+=-DFreeBSD
 		OSSEC_LDFLAGS+=-pthread
-		CFLAGS+=-I/usr/local/include -Wl,--start-group
-		OSSEC_LDFLAGS+=-L/usr/local/lib
+		CFLAGS+=-I/usr/local/include
+		OSSEC_LDFLAGS+=-L/usr/local/lib -Wl,--start-group
+		OSSEC_LDFLAGS+='-Wl,-rpath,$$ORIGIN/../lib'
 else
 ifeq (${uname_S},NetBSD)
 		DEFINES+=-DNetBSD
 		OSSEC_LDFLAGS+=-pthread
-		CFLAGS+=-Wl,--start-group
+		OSSEC_LDFLAGS+=-Wl,--start-group
+		OSSEC_LDFLAGS+='-Wl,-rpath,$$ORIGIN/../lib'
 else
 ifeq (${uname_S},OpenBSD)
 #		DEFINES+=-DOpenBSD
 		DEFINES+=-pthread
-		CFLAGS+=-I/usr/local/include -Wl,--start-group
-		OSSEC_LDFLAGS+=-L/usr/local/lib
+		CFLAGS+=-I/usr/local/include
+		OSSEC_LDFLAGS+=-L/usr/local/lib -Wl,--start-group
+		OSSEC_LDFLAGS+='-Wl,-rpath,$$ORIGIN/../lib'
 else
 ifeq (${uname_S},HP-UX)
 		DEFINES+=-DHPUX
@@ -106,6 +112,7 @@ ifeq (${uname_S},HP-UX)
 		DEFINES+=-D_REENTRANT
 		DEFINES+=-DOS_BIG_ENDIAN
 		OSSEC_LDFLAGS+=-pthread -lrt
+		OSSEC_LDFLAGS+='-Wl,-rpath,$$ORIGIN/../lib'
 		PATH:=${PATH}:/usr/local/bin
 		CC=gcc
 		INSTALL=/usr/local/coreutils/bin/install
@@ -506,10 +513,20 @@ win32/libwinpthread-1.dll: ${WIN_PTHREAD_LIB}
 #### External ######
 ####################
 
-EXTERNAL_LIBS := $(EXTERNAL_JSON)libcjson.$(SHARED) ${EXTERNAL_ZLIB}libz.a ${EXTERNAL_OPENSSL}libssl.a ${EXTERNAL_OPENSSL}libcrypto.a
+ifeq (${TARGET},winagent)
+OPENSSL_LIB = $(EXTERNAL_OPENSSL)libssl-1_1.$(SHARED)
+else
+OPENSSL_LIB = $(EXTERNAL_OPENSSL)libssl.$(SHARED)
+CRYPTO_LIB = $(EXTERNAL_OPENSSL)libcrypto.$(SHARED)
+endif
+
+SQLITE_LIB  = $(EXTERNAL_SQLITE)libsqlite3.$(SHARED)
+JSON_LIB    = $(EXTERNAL_JSON)libcjson.$(SHARED)
+
+EXTERNAL_LIBS := $(JSON_LIB) ${EXTERNAL_ZLIB}libz.a $(OPENSSL_LIB)
 
 ifneq (${TARGET},winagent)
-EXTERNAL_LIBS += ${EXTERNAL_SQLITE}libsqlite3.$(SHARED)
+EXTERNAL_LIBS += $(SQLITE_LIB)
 
 ifeq (${uname_S},Linux)
 EXTERNAL_LIBS += libproc.a ${EXTERNAL_LIBDB}.libs/libdb-6.2.so
@@ -526,33 +543,27 @@ endif
 
 #### OpenSSL ##########
 
-OPENSSL_LIB=${EXTERNAL_OPENSSL}libssl.a
-CRYPTO_LIB=${EXTERNAL_OPENSSL}libcrypto.a
-
-${CRYPTO_LIB}: ${OPENSSL_LIB}
-ifeq (${TARGET},winagent)
-	${OSSEC_RANLIB} ${CRYPTO_LIB}
-endif
-
 ${OPENSSL_LIB}:
 ifeq (${TARGET},winagent)
-	cd ${EXTERNAL_OPENSSL} && CC=${MING_BASE}${CC} ./Configure no-shared mingw && ${MAKE} build_libs
-	${OSSEC_RANLIB} ${OPENSSL_LIB}
+	cd ${EXTERNAL_OPENSSL} && CC=${MING_BASE}${CC} RC=${MING_BASE}windres ./Configure mingw && ${MAKE} build_libs
 else
 ifeq (${uname_S},Darwin)
-	cd ${EXTERNAL_OPENSSL} && ./Configure no-shared darwin64-x86_64-cc && ${MAKE} build_libs
+	cd ${EXTERNAL_OPENSSL} && ./Configure darwin64-x86_64-cc && ${MAKE} build_libs
+	install_name_tool -id "@rpath/libssl.1.1.dylib" $(OPENSSL_LIB)
+	install_name_tool -id "@rpath/libcrypto.1.1.dylib" $(CRYPTO_LIB)
+	install_name_tool -change /usr/local/lib/libcrypto.1.1.dylib @rpath/libcrypto.1.1.dylib $(OPENSSL_LIB)
 else
 ifeq (${uname_S},HP-UX)
-	cd ${EXTERNAL_OPENSSL} && MAKE=gmake ./Configure no-shared hpux-ia64-gcc && ${MAKE} build_libs
+	cd ${EXTERNAL_OPENSSL} && MAKE=gmake ./Configure hpux-ia64-gcc && ${MAKE} build_libs
 else
 ifeq (${uname_S},SunOS)
 ifeq ($(uname_M),i86pc)
-	cd ${EXTERNAL_OPENSSL} && ./Configure no-shared solaris-x86-gcc && ${MAKE} build_libs
+	cd ${EXTERNAL_OPENSSL} && ./Configure solaris-x86-gcc && ${MAKE} build_libs
 else
-	cd ${EXTERNAL_OPENSSL} && ./Configure no-shared solaris-sparcv9-gcc && ${MAKE} build_libs
+	cd ${EXTERNAL_OPENSSL} && ./Configure solaris-sparcv9-gcc && ${MAKE} build_libs
 endif
 else
-	cd ${EXTERNAL_OPENSSL} && ./config no-shared && ${MAKE} build_libs
+	cd ${EXTERNAL_OPENSSL} && ./config && ${MAKE} build_libs
 endif
 endif
 endif
@@ -582,10 +593,8 @@ os_zlib.a: ${os_zlib_o}
 
 #### SQLite #########
 
-SQLITE_LIB = ${EXTERNAL_SQLITE}libsqlite3.$(SHARED)
-
 ifeq (${uname_S},Darwin)
-SQLITE_SHFLAGS=-install_name @loader_path/../lib/libsqlite3.$(SHARED)
+SQLITE_SHFLAGS=-install_name @rpath/libsqlite3.$(SHARED)
 endif
 
 sqlite_c = ${EXTERNAL_SQLITE}sqlite3.c
@@ -599,10 +608,8 @@ $(sqlite_o): $(sqlite_c)
 
 #### cJSON #########
 
-JSON_LIB=$(EXTERNAL_JSON)libcjson.$(SHARED)
-
 ifeq (${uname_S},Darwin)
-JSON_SHFLAGS=-install_name @loader_path/../lib/libcjson.$(SHARED)
+JSON_SHFLAGS=-install_name @rpath/libcjson.$(SHARED)
 endif
 
 cjson_c := ${EXTERNAL_JSON}cJSON.c
@@ -1361,8 +1368,6 @@ ifneq ($(wildcard external/*/*),)
 	cd ${EXTERNAL_ZLIB} && ${MAKE} -f Makefile.in distclean
 	rm -f ${EXTERNAL_ZLIB}/Makefile ${EXTERNAL_ZLIB}/zconf.h
 	-cd ${EXTERNAL_OPENSSL} && ${MAKE} distclean
-	rm -f ${OPENSSL_LIB}
-	rm -f ${CRYPTO_LIB}
 	rm -f ${procps_o} libproc.a
 	rm -f $(sqlite_o) $(EXTERNAL_SQLITE)/libsqlite3.*
 
