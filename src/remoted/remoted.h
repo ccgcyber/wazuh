@@ -82,6 +82,9 @@ void key_lock_write(void);
 
 void key_unlock(void);
 
+size_t rem_getconfig(const char * section, char * output, size_t size);
+cJSON *getRemoteConfig(void);
+
 /** Global variables **/
 
 extern keystore keys;
