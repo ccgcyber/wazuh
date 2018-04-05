@@ -565,7 +565,7 @@ int wm_vulnerability_detector_check_agent_vulnerabilities(agent_software *agents
         return wm_vulnerability_detector_sql_error(db);
     }
 
-    if (sqlite3_prepare_v2(db, vu_queries[VU_AGENTS_TABLE], -1, &stmt, NULL) != SQLITE_OK) {
+    if (sqlite3_prepare_v2(db, vu_queries[VU_REMOVE_AGENTS_TABLE], -1, &stmt, NULL) != SQLITE_OK) {
             return wm_vulnerability_detector_sql_error(db);
     }
     if (wm_vulnerability_detector_step(stmt) != SQLITE_DONE) {
@@ -581,7 +581,7 @@ int wm_vulnerability_detector_check_agent_vulnerabilities(agent_software *agents
             if (VU_AGENT_REQUEST_LIMIT && i == VU_AGENT_REQUEST_LIMIT) {
                 wm_vulnerability_detector_report_agent_vulnerabilities(agents_it, db, i);
                 i = 0;
-                if (sqlite3_prepare_v2(db, vu_queries[VU_AGENTS_TABLE], -1, &stmt, NULL) != SQLITE_OK) {
+                if (sqlite3_prepare_v2(db, vu_queries[VU_REMOVE_AGENTS_TABLE], -1, &stmt, NULL) != SQLITE_OK) {
                         sqlite3_finalize(stmt);
                         return wm_vulnerability_detector_sql_error(db);
                 }
@@ -1084,10 +1084,13 @@ free_mem:
 }
 
 int wm_vulnerability_detector_parser(OS_XML *xml, XML_NODE node, wm_vulnerability_detector_db *parsed_oval, update_node *update, vu_logic condition) {
-    int i, j;
+    int i, j, k;
     int retval = 0;
     int check = 0;
-    int and_condition = 0;
+    char double_condition = 0;
+    char match;
+    int size;
+    vulnerability *vuln;
     char *found;
     XML_NODE chld_node;
     distribution dist = update->dist_ref;
@@ -1301,7 +1304,6 @@ int wm_vulnerability_detector_parser(OS_XML *xml, XML_NODE node, wm_vulnerabilit
             for (j = 0; node[i]->attributes[j]; j++) {
                 if (!strcmp(node[i]->attributes[j], XML_CLASS)) {
                     if (!strcmp(node[i]->values[j], XML_VULNERABILITY) || !strcmp(node[i]->values[j], XML_PATH)) {
-                        vulnerability *vuln;
                         info_cve *cves;
                         os_calloc(1, sizeof(vulnerability), vuln);
                         os_calloc(1, sizeof(info_cve), cves);
@@ -1452,23 +1454,28 @@ int wm_vulnerability_detector_parser(OS_XML *xml, XML_NODE node, wm_vulnerabilit
             for (j = 0; node[i]->attributes[j]; j++) {
                 if (!strcmp(node[i]->attributes[j], XML_TEST_REF)) {
                     static const char pending_state[] = "tst:10\0";
-                    vulnerability *vuln;
 
                     if (parsed_oval->vulnerabilities->state_id) {
-                        os_calloc(1, sizeof(vulnerability), vuln);
-                        os_strdup(parsed_oval->vulnerabilities->cve_id, vuln->cve_id);
-                        vuln->prev = parsed_oval->vulnerabilities;
-                        vuln->state_id = NULL;
-                        vuln->second_state_id = NULL;
-                        vuln->package_name = NULL;
-                        parsed_oval->vulnerabilities = vuln;
+                        if (double_condition != 2) {
+                            os_calloc(1, sizeof(vulnerability), vuln);
+                            os_strdup(parsed_oval->vulnerabilities->cve_id, vuln->cve_id);
+                            vuln->prev = parsed_oval->vulnerabilities;
+                            vuln->state_id = NULL;
+                            vuln->second_state_id = NULL;
+                            vuln->package_name = NULL;
+                            parsed_oval->vulnerabilities = vuln;
 
-                        if (strstr(node[i]->values[j], pending_state)) {
-                            vuln->pending = 1;
+                            if (strstr(node[i]->values[j], pending_state)) {
+                                vuln->pending = 1;
+                            } else {
+                                vuln->pending = 0;
+                            }
+                            os_strdup(node[i]->values[j], vuln->state_id);
                         } else {
-                            vuln->pending = 0;
+                            // It is a double condition
+                            os_strdup(node[i]->values[j], parsed_oval->vulnerabilities->second_state_id);
+                            double_condition = 0;
                         }
-                        os_strdup(node[i]->values[j], vuln->state_id);
                     } else {
                         if (strstr(node[i]->values[j], pending_state)) {
                             parsed_oval->vulnerabilities->pending = 1;
@@ -1477,20 +1484,8 @@ int wm_vulnerability_detector_parser(OS_XML *xml, XML_NODE node, wm_vulnerabilit
                         }
                         os_strdup(node[i]->values[j], parsed_oval->vulnerabilities->state_id);
                     }
-
-                    // Check if it is a double condition
-                    if (and_condition == 1 && (vuln = parsed_oval->vulnerabilities)  &&
-                        vuln->prev && !strcmp(vuln->cve_id, vuln->prev->cve_id)      &&
-                        vuln->prev->package_name && vuln->package_name               &&
-                        !strcmp(vuln->package_name, vuln->prev->package_name)) {
-                        vuln->prev->second_state_id = vuln->state_id;
-                        parsed_oval->vulnerabilities = vuln->prev;
-                        free(vuln->cve_id);
-                        free(vuln->package_name);
-                        free(vuln);
-                        and_condition = 0;
-                    }
                 } else if (!strcmp(node[i]->attributes[j], XML_COMMENT)) {
+                    char success = 0;
                     if (dist == DIS_REDHAT && (strstr(node[i]->values[j], install_check)) &&
                         (found = strstr(node[i]->values[j], XML_RHEL_CHECK))) {
                         int ver;
@@ -1506,8 +1501,8 @@ int wm_vulnerability_detector_parser(OS_XML *xml, XML_NODE node, wm_vulnerabilit
                         }
                     }
 
+                    // If the package of the condition has been extracted, we are checking another condition
                     if (parsed_oval->vulnerabilities->package_name) {
-                        vulnerability *vuln;
                         os_calloc(1, sizeof(vulnerability), vuln);
                         os_strdup(parsed_oval->vulnerabilities->cve_id, vuln->cve_id);
                         vuln->prev = parsed_oval->vulnerabilities;
@@ -1517,76 +1512,98 @@ int wm_vulnerability_detector_parser(OS_XML *xml, XML_NODE node, wm_vulnerabilit
                         parsed_oval->vulnerabilities = vuln;
                     }
 
-                    if (dist == DIS_UBUNTU && (found = strstr(node[i]->values[j], "'"))) {
-                        char *base = ++found;
-                        if (found = strstr(found, "'"), found) {
-                            *found = '\0';
-                            os_strdup(base, parsed_oval->vulnerabilities->package_name);
-                        }
-                    } else if (dist == DIS_DEBIAN && (found = strstr(node[i]->values[j], " DPKG is earlier than"))) {
-                        *found = '\0';
-                        os_strdup(node[i]->values[j], parsed_oval->vulnerabilities->package_name);
-                    } else if (dist == DIS_REDHAT && (found = strstr(node[i]->values[j], " "))) {
-                        *found = '\0';
-                        os_strdup(node[i]->values[j], parsed_oval->vulnerabilities->package_name);
-                    } else if (dist == DIS_WINDOWS || dist == DIS_MACOS) {
-                        char match;
-                        int k;
-                        int size;
-                        vulnerability *vuln;
-
-                        if (found = strstr(node[i]->values[j], check_if), found) {
-                            size = strlen(check_if);
-                            found += size;
-                        } else if (found = strstr(node[i]->values[j], check_that), found) {
-                            size = strlen(check_that);
-                            found += size;
-                        } else {
-                            found = node[i]->values[j];
-                        }
-
-                        if (!reg_packages) {
-                            if (reg_packages = wm_vulnerability_set_packages_patterns(), !reg_packages) {
-                                return OS_INVALID;
-                            }
-                        }
-
-                        for (k = 0, match = 0; reg_packages[k].patterns; k++) {
-                            if (OSRegex_Execute(found, &reg_packages[k])) {
-                                match = 1;
-                                break;
-                            }
-                        }
-                        if (!match) {
-                            mterror(WM_VULNDETECTOR_LOGTAG, VU_PACKAGE_RECOG_ERROR, node[i]->values[j]);
-                            return OS_INVALID;
-                        } else if (*reg_packages[k].sub_strings) {
-                            os_strdup(*reg_packages[k].sub_strings, parsed_oval->vulnerabilities->package_name);
-                            OSRegex_FreeSubStrings(&reg_packages[k]);
-
-                            // Check if it is a double condition
-                            if (!and_condition && (vuln = parsed_oval->vulnerabilities) && vuln->prev &&
-                                !strcmp(vuln->cve_id, vuln->prev->cve_id) &&
-                                !strcmp(vuln->package_name, vuln->prev->package_name)) {
-                                if (vuln->state_id) {
-                                    vuln->prev->second_state_id = vuln->state_id;
-                                    parsed_oval->vulnerabilities = vuln->prev;
-                                    free(vuln->cve_id);
-                                    free(vuln->package_name);
-                                    free(vuln);
-                                    and_condition = 0;
+                    switch (dist) {
+                        case DIS_UBUNTU:
+                            if (found = strstr(node[i]->values[j], "'"), found) {
+                                char *base = ++found;
+                                if (found = strstr(found, "'"), found) {
+                                    *found = '\0';
+                                    os_strdup(base, parsed_oval->vulnerabilities->package_name);
+                                    success = 1;
                                 }
                             }
-                        } else {
-                            // Firmware check skipped
-                        }
-                    } else {
+                        break;
+                        case DIS_DEBIAN:
+                            if (found = strstr(node[i]->values[j], " DPKG is earlier than"), found) {
+                               *found = '\0';
+                               os_strdup(node[i]->values[j], parsed_oval->vulnerabilities->package_name);
+                               success = 1;
+                            }
+                        break;
+                        case DIS_REDHAT:
+                            if (found = strstr(node[i]->values[j], " "), found) {
+                                *found = '\0';
+                                os_strdup(node[i]->values[j], parsed_oval->vulnerabilities->package_name);
+                                success = 1;
+                            }
+                        break;
+                        case DIS_WINDOWS: case DIS_MACOS:
+                            if (found = strstr(node[i]->values[j], check_if), found) {
+                                size = strlen(check_if);
+                                found += size;
+                            } else if (found = strstr(node[i]->values[j], check_that), found) {
+                                size = strlen(check_that);
+                                found += size;
+                            } else {
+                                found = node[i]->values[j];
+                            }
+
+                            if (!reg_packages) {
+                                if (reg_packages = wm_vulnerability_set_packages_patterns(), !reg_packages) {
+                                    return OS_INVALID;
+                                }
+                            }
+
+                            for (k = 0, match = 0; reg_packages[k].patterns; k++) {
+                                if (OSRegex_Execute(found, &reg_packages[k])) {
+                                    match = 1;
+                                    break;
+                                }
+                            }
+                            if (!match) {
+                                mterror(WM_VULNDETECTOR_LOGTAG, VU_PACKAGE_RECOG_ERROR, node[i]->values[j]);
+                                return OS_INVALID;
+                            } else if (*reg_packages[k].sub_strings) {
+                                os_strdup(*reg_packages[k].sub_strings, parsed_oval->vulnerabilities->package_name);
+                                OSRegex_FreeSubStrings(&reg_packages[k]);
+                                // Check for double condition
+                                if (condition == VU_AND) {
+                                    if (!double_condition) {
+                                        double_condition = 1;
+                                    } else {
+                                        vuln = parsed_oval->vulnerabilities;
+                                        if (!strcmp(vuln->cve_id, vuln->prev->cve_id) &&
+                                            !strcmp(vuln->package_name, vuln->prev->package_name)) {
+                                            // Checks if the id from this check has already been extracted
+                                            if (!vuln->state_id) {
+                                                // It will be read below
+                                                double_condition = 2;
+                                            } else {
+                                                vuln->prev->second_state_id = vuln->state_id;
+                                                free(vuln->cve_id);
+                                                double_condition = 0;
+                                            }
+                                            parsed_oval->vulnerabilities = vuln->prev;
+                                            free(vuln->package_name);
+                                            free(vuln);
+                                        } else {
+                                            double_condition = 0;
+                                        }
+                                    }
+                                }
+                            } else {
+                                // Firmware check skipped
+                            }
+                            success = 1;
+                        break;
+                        default:
+                        break;
+                    }
+
+                    if (!success) {
                         mterror(WM_VULNDETECTOR_LOGTAG, VU_PACKAGE_NAME_ERROR);
                         goto end;
                     }
-                }
-                if (parsed_oval->vulnerabilities->package_name && condition == VU_AND) {
-                    and_condition = 1;
                 }
             }
         } else if ((dist == DIS_MACOS && !strcmp(node[i]->element, XML_OVAL_DEF_DESCRIPTION)) || !strcmp(node[i]->element, XML_DESCRIPTION)) {
