@@ -311,14 +311,15 @@
 #define VU_NO_SYSC_SCANS            "(5434): No Syscollector scans found for agent %s, so their vulnerabilities will not be checked."
 #define VU_GLOBALDB_OPEN_ERROR      "(5435): Could not open global_db."
 #define VU_REPORT_ERROR             "(5436): The agent %s vulnerabilities could not be reported."
+#define VU_UPDATE_RETRY             "(5437): Failed when updating '%s %s' database. Retrying in %lu seconds..."
 
 /* Verbose messages */
 #define STARTUP_MSG "Started (pid: %d)."
 #define PRIVSEP_MSG "Chrooted to directory: %s, using user: %s"
 #define MSG_SOCKET_SIZE "(unix_domain) Maximum send buffer set to: '%d'."
 
-#define NO_SYSLOG       "(1501): No IP or network allowed in the access list" \
-                        " for syslog. No reason for running it. Exiting."
+#define NO_SYSLOG       "(1501): IP or network must be present in syslog" \
+                        " access list (allowed-ips). Syslog server disabled."
 #define CONN_TO     "Connected to '%s' (%s queue)"
 #define MAIL_DIS    "E-Mail notification disabled. Clean Exit."
 

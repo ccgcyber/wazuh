@@ -238,14 +238,15 @@ int Read_Localfile(XML_NODE node, void *d1, __attribute__((unused)) void *d2)
                     os_realloc(logf, (pl +2)*sizeof(logreader), log_config->config);
                     logf = log_config->config;
                     memset(logf + pl, 0, 2 * sizeof(logreader));
+                    labels_z = 0;
                 }
 
 
                 globfree(&g);
             } else if (strchr(node[i]->content, '%'))
-            #else
+#else
             if (strchr(node[i]->content, '%'))
-            #endif /* WIN32 */
+#endif /* WIN32 */
 
             /* We need the format file (based on date) */
             {
@@ -294,35 +295,27 @@ int Read_Localfile(XML_NODE node, void *d1, __attribute__((unused)) void *d2)
             } else if (strcmp(logf[pl].logformat, "full_command") == 0) {
             } else if (strcmp(logf[pl].logformat, "audit") == 0) {
             } else if (strncmp(logf[pl].logformat, "multi-line", 10) == 0) {
-                int x = 0;
-                logf[pl].logformat += 10;
 
-                while (logf[pl].logformat[0] == ' ') {
-                    logf[pl].logformat++;
+                char *p_lf = logf[pl].logformat;
+                p_lf += 10;
+
+                while (p_lf[0] == ' ') {
+                    p_lf++;
                 }
 
-                if (logf[pl].logformat[0] != ':') {
+                if (*p_lf != ':') {
                     merror(XML_VALUEERR, node[i]->element, node[i]->content);
                     return (OS_INVALID);
                 }
-                logf[pl].logformat++;
+                p_lf++;
 
-                while (*logf[pl].logformat == ' ') {
-                    logf[pl].logformat++;
-                }
+                char *end;
 
-                while (logf[pl].logformat[x] >= '0' && logf[pl].logformat[x] <= '9') {
-                    x++;
-                }
-
-                while (logf[pl].logformat[x] == ' ') {
-                    x++;
-                }
-
-                if (logf[pl].logformat[x] != '\0') {
+                if (logf[pl].linecount = strtol(p_lf, &end, 10), end == p_lf || logf[pl].linecount < 1 ) {
                     merror(XML_VALUEERR, node[i]->element, node[i]->content);
                     return (OS_INVALID);
                 }
+
             } else if (strcmp(logf[pl].logformat, EVENTLOG) == 0) {
             } else if (strcmp(logf[pl].logformat, EVENTCHANNEL) == 0) {
             } else {
@@ -403,7 +396,7 @@ int Read_Localfile(XML_NODE node, void *d1, __attribute__((unused)) void *d2)
             labels = logf[glob_set - 1].labels;
             logf[glob_set - 1].labels = NULL;
         } else {
-            return (OS_INVALID);
+            labels = NULL;
         }
 
         /* The last entry is always null on glob */
@@ -437,7 +430,7 @@ int Read_Localfile(XML_NODE node, void *d1, __attribute__((unused)) void *d2)
                 os_strdup(outformat, logf[i].outformat);
             }
 
-            if (logf[i].labels == NULL) {
+            if (labels && !logf[i].labels) {
                 logf[i].labels = labels_dup(labels);
             }
         }
@@ -491,10 +484,12 @@ int Read_Localfile(XML_NODE node, void *d1, __attribute__((unused)) void *d2)
 
     return (0);
 
+#ifndef WIN32
 clean:
     Free_Logreader(logf + pl);
     memset(logf + pl, 0, sizeof(logreader));
     return 0;
+#endif
 }
 
 int Test_Localfile(const char * path){

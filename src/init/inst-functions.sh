@@ -121,6 +121,19 @@ WriteSyscollector()
     cat ${SYSCOLLECTOR_TEMPLATE} >> $NEWCONFIG
     echo "" >> $NEWCONFIG
 }
+##########
+# Osquery()
+##########
+WriteOsquery()
+{
+    # Adding to the config file
+    OSQUERY_TEMPLATE=$(GetTemplate "osquery.$1.template" ${DIST_NAME} ${DIST_VER} ${DIST_SUBVER})
+    if [ "$OSQUERY_TEMPLATE" = "ERROR_NOT_FOUND" ]; then
+        OSQUERY_TEMPLATE=$(GetTemplate "osquery.template" ${DIST_NAME} ${DIST_VER} ${DIST_SUBVER})
+    fi
+    sed -e "s|\${INSTALLDIR}|$INSTALLDIR|g" "${OSQUERY_TEMPLATE}" >> $NEWCONFIG
+    echo "" >> $NEWCONFIG
+}
 
 ##########
 # WriteCISCAT()
@@ -324,6 +337,9 @@ WriteAgent()
     # CIS-CAT configuration
     WriteCISCAT "agent"
 
+    # Write osquery
+    WriteOsquery "agent"
+
     # Syscollector configuration
     WriteSyscollector "agent"
 
@@ -361,6 +377,7 @@ WriteAgent()
         echo "    <ca_store>${CA_STORE}</ca_store>" >> $NEWCONFIG
     fi
 
+    echo "    <ca_verification>yes</ca_verification>" >> $NEWCONFIG
     echo "  </active-response>" >> $NEWCONFIG
     echo "" >> $NEWCONFIG
 
@@ -423,6 +440,9 @@ WriteManager()
 
     # CIS-CAT configuration
     WriteCISCAT "manager"
+
+    # Write osquery
+    WriteOsquery "manager"
 
     # Syscollector configuration
     WriteSyscollector "manager"
@@ -536,6 +556,9 @@ WriteLocal()
 
     # CIS-CAT configuration
     WriteCISCAT "agent"
+
+    # Write osquery
+    WriteOsquery "manager"
 
     # Vulnerability Detector
     cat ${VULN_TEMPLATE} >> $NEWCONFIG
@@ -844,7 +867,6 @@ InstallServer(){
     InstallLocal
 
     # Install cluster files
-    ${INSTALL} -m 0660 -o ${OSSEC_USER} -g ${OSSEC_GROUP} /dev/null ${PREFIX}/logs/cluster.log
     ${INSTALL} -d -m 0770 -o ${OSSEC_USER} -g ${OSSEC_GROUP} ${PREFIX}/queue/cluster
 
     ${INSTALL} -d -m 760 -o root -g ${OSSEC_GROUP} ${PREFIX}/queue/vulnerabilities

@@ -233,7 +233,6 @@ void wm_sync_manager() {
     OS_ClearXML(&xml);
 
     if ((os_uname = strdup(getuname()))) {
-        os_arch = (char *) malloc(50);
         os_arch = wm_get_os_arch(os_uname);
         char *ptr;
 
@@ -481,6 +480,7 @@ char * wm_get_os_arch(char * os_header) {
     mtdebug2(WM_DATABASE_LOGTAG, "Detected architecture from %s: %s", os_header, os_arch);
     return os_arch;
 }
+
 
 int wm_sync_agentinfo(int id_agent, const char *path) {
     char header[OS_MAXSTR];

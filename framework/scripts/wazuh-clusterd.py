@@ -28,7 +28,7 @@ try:
     from wazuh import common
 except Exception as e:
     print ("Error starting wazuh-clusterd: {0}".format(e))
-    exit()
+    exit(1)
 
 
 # Rest of imports. If an exception is raised, it will be logged using logging.
@@ -41,7 +41,7 @@ try:
     import ctypes
     import ctypes.util
     import socket
-    from os import seteuid, setgid, getpid, kill, unlink
+    from os import seteuid, setgid, getpid, chown, chmod
 
     from wazuh.exception import WazuhException
     from wazuh.pyDaemonModule import pyDaemon, create_pid, delete_pid
@@ -216,9 +216,15 @@ if __name__ == '__main__':
 
     set_logging(foreground_mode=args.f, debug_mode=debug_mode)
 
+    # set appropiate permissions to the cluster.log file
+    chown('{0}/logs/cluster.log'.format(common.ossec_path), common.ossec_uid, common.ossec_gid)
+    chmod('{0}/logs/cluster.log'.format(common.ossec_path), 0o660)
+
     if error_msg:
         logger.error(error_msg)
-        exit()
+        if not args.f:
+            print ("Error starting wazuh-clusterd: {0}".format(error_msg))
+        exit(1)
 
     # Signals
     signal(SIGINT, signal_handler)

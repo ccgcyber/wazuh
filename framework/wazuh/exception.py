@@ -101,6 +101,7 @@ class WazuhException(Exception):
         1728: 'Invalid node type',
         1729: 'Agent status not valid. Valid statuses are Active, Disconnected, Pending and Never Connected.',
         1730: 'Node does not exist',
+        1731: 'Agent is not eligible for removal',
 
         # Manager:
 
@@ -128,6 +129,7 @@ class WazuhException(Exception):
         3012: 'Cluster is not running',
         3013: 'Cluster is disabled',
         3015: 'Cannot access directory',
+        3016: 'Received an error response'
 
         # > 9000: Authd
     }

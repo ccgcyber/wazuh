@@ -1,6 +1,7 @@
 # TODO: mysql and postgresql?
 
 uname_S := $(shell sh -c 'uname -s 2>/dev/null || echo not')
+uname_P := $(shell sh -c 'uname -p 2>/dev/null || echo not')
 
 ROUTE_PATH := $(shell pwd)
 EXTERNAL_JSON=external/cJSON/
@@ -64,14 +65,15 @@ ifeq (${uname_S},AIX)
 		DEFINES+=-DAIX
 		DEFINES+=-DHIGHFIRST
 		PATH:=${PATH}:/usr/vac/bin
-		OSSEC_LDFLAGS+='-Wl,-rpath,$$ORIGIN/../lib'
 		CC=gcc
 else
 ifeq (${uname_S},SunOS)
 		DEFINES+=-DSOLARIS
 		DEFINES+=-DHIGHFIRST
 		DEFINES+=-std=gnu99
+ifneq (${uname_P},sparc)
 		OSSEC_LDFLAGS+=-z relax=secadj
+endif
 		OSSEC_LDFLAGS+='-Wl,-rpath,$$ORIGIN/../lib'
 		OSSEC_LIBS+=-lsocket -lnsl -lresolv -lrt
 		PATH:=${PATH}:/usr/ccs/bin:/usr/xpg4/bin:/opt/csw/gcc3/bin:/opt/csw/bin:/usr/sfw/bin
@@ -85,6 +87,7 @@ ifeq (${uname_S},Darwin)
 		DEFINES+=-DHIGHFIRST
 		OSSEC_LDFLAGS+=-Xlinker -rpath -Xlinker "@executable_path/../lib"
 		SHARED=dylib
+		OSSEC_LIBS+=-framework Security
 else
 ifeq (${uname_S},FreeBSD)
 		DEFINES+=-DFreeBSD
@@ -133,6 +136,10 @@ endif
 
 ifndef DISABLE_CISCAT
 	DEFINES+=-DENABLE_CISCAT
+endif
+
+ifndef DISABLE_SHARED
+	DEFINES+=-DENABLE_SHARED
 endif
 
 ifdef DEBUGAD
@@ -629,10 +636,10 @@ ${LIBCURL_LIB}: $(EXTERNAL_CURL)Makefile
 
 ifeq (${uname_S},Darwin)
 $(EXTERNAL_CURL)Makefile:
-	cd $(EXTERNAL_CURL) && ./configure --with-darwinssl
+	cd $(EXTERNAL_CURL) && ./configure --with-darwinssl --disable-ldap --without-libidn2
 else
 $(EXTERNAL_CURL)Makefile: $(OPENSSL_LIB)
-	cd $(EXTERNAL_CURL) && CPPFLAGS="-fPIC -I${ROUTE_PATH}/${EXTERNAL_OPENSSL}include" LDFLAGS="-L${ROUTE_PATH}/${EXTERNAL_OPENSSL}" ./configure
+	cd $(EXTERNAL_CURL) && CPPFLAGS="-fPIC -I${ROUTE_PATH}/${EXTERNAL_OPENSSL}include" LDFLAGS="-L${ROUTE_PATH}/${EXTERNAL_OPENSSL}" LIBS="-ldl -lpthread" ./configure --disable-ldap
 endif
 
 
@@ -689,8 +696,13 @@ external/%.tar.gz:
 #### OSSEC Libs ####
 ####################
 
+ifdef DISABLE_SHARED
+BUILD_LIBS = libwazuh.a $(EXTERNAL_LIBS)
+endif
+ifndef DISABLE_SHARED
 WAZUHEXT_LIB = libwazuhext.$(SHARED)
 BUILD_LIBS = libwazuh.a $(WAZUHEXT_LIB)
+endif
 
 $(BUILD_SERVER) $(BUILD_AGENT) $(WINDOWS_BINS): $(BUILD_LIBS)
 
@@ -865,18 +877,25 @@ libwazuh.a: ${config_o} ${wmodules_dep} ${crypto_o} ${shared_o} ${os_net_o} ${os
 
 ### libwazuhext #########
 
+ifndef DISABLE_SHARED
 ifeq (${uname_S},Darwin)
 WAZUH_SHFLAGS=-install_name @rpath/libwazuhext.$(SHARED)
 
 $(WAZUHEXT_LIB): $(EXTERNAL_LIBS)
-	$(OSSEC_SHARED) $(OSSEC_CFLAGS) $(WAZUH_SHFLAGS) -o $@ -Wl,-all_load $^ -Wl,-noall_load
+	$(OSSEC_SHARED) $(OSSEC_CFLAGS) $(WAZUH_SHFLAGS) -o $@ -Wl,-all_load $^ -Wl,-noall_load $(OSSEC_LIBS)
 else
 ifeq (${TARGET}, winagent)
 $(WAZUHEXT_LIB): $(EXTERNAL_LIBS)
 	$(OSSEC_SHARED) $(OSSEC_CFLAGS) -o $@ -static-libgcc -Wl,--export-all-symbols -Wl,--whole-archive $^ -Wl,--no-whole-archive ${OSSEC_LIBS}
 else
+ifeq (${uname_P},sparc)
+$(WAZUHEXT_LIB): $(EXTERNAL_LIBS)
+	$(OSSEC_SHARED) $(OSSEC_CFLAGS) -mimpure-text -o $@ -Wl,--whole-archive $^ -Wl,--no-whole-archive ${OSSEC_LIBS}
+else
 $(WAZUHEXT_LIB): $(EXTERNAL_LIBS)
 	$(OSSEC_SHARED) $(OSSEC_CFLAGS) -o $@ -Wl,--whole-archive $^ -Wl,--no-whole-archive ${OSSEC_LIBS}
+endif
+endif
 endif
 endif
 
