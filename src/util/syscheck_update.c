@@ -79,7 +79,7 @@ int main(int argc, char **argv)
     } else if (strcmp(argv[1], "-l") == 0) {
         printf("\n%s %s: Updates the integrity check database.",
                __ossec_name, ARGV0);
-        print_agents(0, 0, 0, 0);
+        print_agents(0, 0, 0, 0, 0);
         printf("\n");
         exit(0);
     } else if (strcmp(argv[1], "-u") == 0) {
@@ -120,7 +120,7 @@ int main(int argc, char **argv)
         closedir(sys_dir);
         wdb_delete_fim_all();
 
-        printf("\n** Integrity check database updated.\n\n");
+        printf("\n** Integrity check database updated. Restart the manager to apply changes.\n\n");
         exit(0);
     } else {
         printf("\n** Invalid option '%s'.\n", argv[1]);
@@ -169,6 +169,6 @@ int main(int argc, char **argv)
         wdb_delete_fim(atoi(keys.keyentries[i]->id));
     }
 
-    printf("\n** Integrity check database updated.\n\n");
+    printf("\n** Integrity check database updated. Restart the manager to apply changes.\n\n");
     return (0);
 }

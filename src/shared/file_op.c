@@ -414,11 +414,42 @@ int IsDir(const char *file)
     return (-1);
 }
 
+/* Return 1 if it is a file, 2 if it is a directory, 0 otherwise */
+int check_path_type(const char *dir)
+{
+    DIR *dp;
+    int retval;
+
+    if (dp = opendir(dir), dp) {
+        retval = 2;
+        closedir(dp);
+    } else if (errno == ENOTDIR){
+        retval = 1;
+    } else {
+        retval = 0;
+    }
+    return retval;
+}
+
 int IsFile(const char *file)
 {
     struct stat buf;
 	return (!stat(file, &buf) && S_ISREG(buf.st_mode)) ? 0 : -1;
 }
+
+#ifndef WIN32
+
+int IsSocket(const char * file) {
+    struct stat buf;
+	return (!stat(file, &buf) && S_ISSOCK(buf.st_mode)) ? 0 : -1;
+}
+
+int IsLink(const char * file) {
+    struct stat buf;
+	return (!lstat(file, &buf) && S_ISLNK(buf.st_mode)) ? 0 : -1;
+}
+
+#endif // WIN32
 
 off_t FileSize(const char * path) {
     struct stat buf;
@@ -443,13 +474,16 @@ int CreatePID(const char *name, int pid)
     }
 
     fprintf(fp, "%d\n", pid);
-
     if (chmod(file, 0640) != 0) {
+        merror(CHMOD_ERROR, file, errno, strerror(errno));
         fclose(fp);
         return (-1);
     }
 
-    fclose(fp);
+    if (fclose(fp)) {
+        merror("Could not write PID file '%s': %s (%d)", file, strerror(errno), errno);
+        return -1;
+    }
 
     return (0);
 }
@@ -529,7 +563,7 @@ int UnmergeFiles(const char *finalpath, const char *optdir, int mode)
 
     finalfp = fopen(finalpath, mode == OS_BINARY ? "rb" : "r");
     if (!finalfp) {
-        merror("Unable to read merged file: '%s'.", finalpath);
+        merror("Unable to read merged file: '%s' due to [(%d)-(%s)].", finalpath, errno, strerror(errno));
         return (0);
     }
 
@@ -590,7 +624,7 @@ int UnmergeFiles(const char *finalpath, const char *optdir, int mode)
         if (state_ok) {
             if (fp = fopen(final_name, mode == OS_BINARY ? "wb" : "w"), !fp) {
                 ret = 0;
-                merror("Unable to unmerge file '%s'.", final_name);
+                merror("Unable to unmerge file '%s' due to [(%d)-(%s)].", final_name, errno, strerror(errno));
             }
         } else {
             fp = NULL;
@@ -734,7 +768,6 @@ int MergeAppendFile(const char *finalpath, const char *files, const char *tag, i
     char buf[2048 + 1];
     FILE *fp;
     FILE *finalfp;
-    struct stat statbuff;
     char newpath[PATH_MAX];
     DIR *dir;
     struct dirent *ent;
@@ -744,7 +777,7 @@ int MergeAppendFile(const char *finalpath, const char *files, const char *tag, i
     if (files == NULL) {
         finalfp = fopen(finalpath, "w");
         if (!finalfp) {
-            merror("Unable to create merged file: '%s'.", finalpath);
+            merror("Unable to create merged file: '%s' due to [(%d)-(%s)].", finalpath, errno, strerror(errno));
             return (0);
         }
 
@@ -778,39 +811,19 @@ int MergeAppendFile(const char *finalpath, const char *files, const char *tag, i
         }
     }
 
-    if (stat(files, &statbuff) < 0) {
-        merror("at %s(): " FSTAT_ERROR, __func__, files, errno, strerror(errno));
-        return 0;
-    }
+    /* Is a file */
+    if (dir = opendir(files), !dir) {
 
-    if (S_ISDIR(statbuff.st_mode)) {
-        mdebug2("Merging directory: %s", files);
-
-        if (dir = opendir(files), !dir) {
-            merror("Couldn't open directory '%s': %s (%d)", files, strerror(errno), errno);
-            return 0;
-        }
-
-        while ((ent = readdir(dir)) != NULL) {
-            // Skip . and ..
-            if (ent->d_name[0] != '.' || (ent->d_name[1] && (ent->d_name[1] != '.' || ent->d_name[2]))) {
-                snprintf(newpath, PATH_MAX, "%s/%s", files, ent->d_name);
-                MergeAppendFile(finalpath, newpath, tag, path_offset);
-            }
-        }
-
-        closedir(dir);
-    } else {
         finalfp = fopen(finalpath, "a");
         if (!finalfp) {
-            merror("Unable to append merged file: '%s'.", finalpath);
+            merror("Unable to append merged file: '%s' due to [(%d)-(%s)].", finalpath, errno, strerror(errno));
             return (0);
         }
 
         fp = fopen(files, "r");
 
         if (!fp) {
-            merror("Unable to merge file '%s'.", files);
+            merror("Unable to merge file '%s' due to [(%d)-(%s)].", files, errno, strerror(errno));
             fclose(finalfp);
             return (0);
         }
@@ -833,6 +846,19 @@ int MergeAppendFile(const char *finalpath, const char *files, const char *tag, i
         fclose(fp);
         fclose(finalfp);
     }
+    else { /* Is a directory */
+        mdebug2("Merging directory: %s", files);
+
+        while ((ent = readdir(dir)) != NULL) {
+            // Skip . and ..
+            if (ent->d_name[0] != '.' || (ent->d_name[1] && (ent->d_name[1] != '.' || ent->d_name[2]))) {
+                snprintf(newpath, PATH_MAX, "%s/%s", files, ent->d_name);
+                MergeAppendFile(finalpath, newpath, tag, path_offset);
+            }
+        }
+
+        closedir(dir);
+    }
 
     return (1);
 }
@@ -850,7 +876,7 @@ int MergeFiles(const char *finalpath, char **files, const char *tag)
 
     finalfp = fopen(finalpath, "w");
     if (!finalfp) {
-        merror("Unable to create merged file: '%s'.", finalpath);
+        merror("Unable to create merged file: '%s' due to [(%d)-(%s)].", finalpath, errno, strerror(errno));
         return (0);
     }
 
@@ -861,7 +887,7 @@ int MergeFiles(const char *finalpath, char **files, const char *tag)
     while (files[i]) {
         fp = fopen(files[i], "r");
         if (!fp) {
-            merror("Unable to merge file '%s'.", files[i]);
+            merror("Unable to merge file '%s' due to [(%d)-(%s)].", files[i], errno, strerror(errno));
             i++;
             ret = 0;
             continue;
@@ -892,89 +918,6 @@ int MergeFiles(const char *finalpath, char **files, const char *tag)
 
     fclose(finalfp);
     return (ret);
-}
-
-int w_backup_file(File *file, const char *source) {
-    FILE *fp_src;
-    int fd;
-    char template[OS_FLSIZE + 1];
-    mode_t old_mask;
-
-	/* Check if source file exists */
-	FILE *fsource;
-	fsource = fopen(source,"r");
-
-	if(!fsource)
-	{
-        merror(FOPEN_ERROR, source, errno, strerror(errno));
-		return -1;
-	}
-
-    snprintf(template, OS_FLSIZE, "%s.backup", source);
-    old_mask = umask(0177);
-
-    fd = open(template,O_WRONLY | O_CREAT,old_mask);
-    umask(old_mask);
-
-    if (fd < 0) {
-        return -1;
-    }
-
-#ifndef WIN32
-    struct stat buf;
-
-    if (stat(source, &buf) == 0) {
-        if (fchmod(fd, buf.st_mode) < 0) {
-            close(fd);
-            unlink(template);
-            return -1;
-        }
-    } else {
-        mdebug1(FSTAT_ERROR, source, errno, strerror(errno));
-    }
-
-#endif
-
-    file->fp = fdopen(fd, "w");
-
-    if (!file->fp) {
-        close(fd);
-        unlink(template);
-        return -1;
-    }
-
-
-    size_t count_r;
-    size_t count_w;
-    char buffer[4096];
-
-    if (fp_src = fopen(source, "r"), fp_src) {
-        while (!feof(fp_src)) {
-            count_r = fread(buffer, 1, 4096, fp_src);
-
-            if (ferror(fp_src)) {
-                fclose(fp_src);
-                fclose(file->fp);
-                unlink(template);
-                return -1;
-            }
-
-            count_w = fwrite(buffer, 1, count_r, file->fp);
-
-            if (count_w != count_r || ferror(file->fp)) {
-                fclose(fp_src);
-                fclose(file->fp);
-                unlink(template);
-                return -1;
-            }
-        }
-
-        fclose(fp_src);
-    }
-
-
-    file->name = strdup(template);
-    return 0;
 }
 
 
@@ -1189,6 +1132,25 @@ int checkVista()
     return (isVista);
 }
 
+int get_creation_date(char *dir, SYSTEMTIME *utc) {
+    HANDLE hdle;
+    FILETIME creation_date;
+    int retval = 1;
+
+    if (hdle = CreateFile(dir, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL | FILE_FLAG_BACKUP_SEMANTICS, NULL), hdle == INVALID_HANDLE_VALUE) {
+        return retval;
+    }
+
+    if (!GetFileTime(hdle, &creation_date, NULL, NULL)) {
+        goto end;
+    }
+
+    FileTimeToSystemTime(&creation_date, utc);
+    retval = 0;
+end:
+    CloseHandle(hdle);
+    return retval;
+}
 
 /* Get basename of path */
 char *basename_ex(char *path)
@@ -1583,7 +1545,7 @@ const char *getuname()
                 DWORD dwCount = size;
                 add_infoEx = 0;
 
-                if (RegOpenKeyEx(HKEY_LOCAL_MACHINE, TEXT("SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion"), 0, KEY_READ, &RegistryKey) != ERROR_SUCCESS) {
+                if (RegOpenKeyEx(HKEY_LOCAL_MACHINE, TEXT("SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion"), 0, KEY_READ | KEY_WOW64_64KEY , &RegistryKey) != ERROR_SUCCESS) {
                     merror("Error opening Windows registry.");
                 }
 
@@ -1802,7 +1764,7 @@ const char *getuname()
                 DWORD dwCount = size;
                 unsigned long type=REG_DWORD;
 
-                if (RegOpenKeyEx(HKEY_LOCAL_MACHINE, TEXT("SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion"), 0, KEY_READ, &RegistryKey) != ERROR_SUCCESS) {
+                if (RegOpenKeyEx(HKEY_LOCAL_MACHINE, TEXT("SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion"), 0, KEY_READ | KEY_WOW64_64KEY, &RegistryKey) != ERROR_SUCCESS) {
                     merror("Error opening Windows registry.");
                 }
 
@@ -2090,8 +2052,7 @@ int OS_MoveFile(const char *src, const char *dst) {
 
     fclose(fp_src);
     fclose(fp_dst);
-    unlink(dst);
-    return status;
+    return status ? status : unlink(src);
 }
 
 // Make directory recursively

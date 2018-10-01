@@ -35,7 +35,7 @@
 //#define PIPE_ERROR    "%s(1120): ERROR: Pipe error."
 #define GLOB_ERROR    "(1121): Glob error. Invalid pattern: '%s'."
 #define GLOB_NFOUND   "(1122): No file found by pattern: '%s'."
-//#define UNLINK_ERROR  "%s(1123): ERROR: Unable to delete file: '%s'."
+#define UNLINK_ERROR  "(1123): Unable to delete file: '%s' due to [(%d)-(%s)]."
 #define RENAME_ERROR  "(1124): Could not rename file '%s' to '%s' due to [(%d)-(%s)]."
 //#define INT_ERROR     "%s(1125): ERROR: Internal error (undefined)."
 #define OPEN_ERROR    "(1126): Unable to open file '%s' due to [(%d)-(%s)]."
@@ -48,11 +48,11 @@
 #define CHDIR_ERROR   "(1133): Unable to chdir to directory '%s' due to [(%d)-(%s)]."
 #define LINK_ERROR    "(1134): Unable to link from '%s' to '%s' due to [(%d)-(%s)]."
 #define CHOWN_ERROR   "(1135): Could not chown object '%s' due to [(%d)-(%s)]."
-#define CHOWN_ERROR   "(1135): Could not chown object '%s' due to [(%d)-(%s)]."
 #define EPOLL_ERROR   "(1136): Could not handle epoll descriptor."
 #define LOST_ERROR   "(1137): Lost connection with manager. Setting lock."
 #define KQUEUE_ERROR   "(1138): Could not handle kqueue descriptor."
 #define FTELL_ERROR     "(1139): Could not get position from file '%s' due to [(%d)-(%s)]."
+#define FCLOSE_ERROR  "(1140): Could not close file '%s' due to [(%d)-(%s)]."
 
 /* COMMON ERRORS */
 #define CONN_ERROR      "(1201): No remote connection configured."
@@ -60,7 +60,7 @@
 #define USER_ERROR      "(1203): Invalid user '%s' or group '%s' given."
 #define CONNTYPE_ERROR  "(1204): Invalid connection type: '%s'."
 #define PORT_ERROR      "(1205): Invalid port number: '%d'."
-#define BIND_ERROR      "(1206): Unable to Bind port '%d'"
+#define BIND_ERROR      "(1206): Unable to Bind port '%d' due to [(%d)-(%s)]"
 #define RCONFIG_ERROR   "(1207): %s remote configuration in '%s' is corrupted."
 #define QUEUE_ERROR     "(1210): Queue '%s' not accessible: '%s'."
 #define QUEUE_FATAL     "(1211): Unable to access queue: '%s'. Giving up.."
@@ -68,7 +68,7 @@
 #define DENYIP_WARN     "(1213): Message from '%s' not allowed."
 #define MSG_ERROR       "(1214): Problem receiving message from '%s'."
 #define CLIENT_ERROR    "(1215): No client configured. Exiting."
-#define CONNS_ERROR     "(1216): Unable to connect to '%s'."
+#define CONNS_ERROR     "(1216): Unable to connect to '%s': '%s'."
 #define UNABLE_CONN     "(1242): Unable to connect to server. Exhausted all options."
 #define SEC_ERROR       "(1217): Error creating encrypted message."
 #define SEND_ERROR      "(1218): Unable to send message to '%s': %s"
@@ -124,6 +124,7 @@
 #define SK_DUP          "(1756): Duplicated directory given: '%s'."
 #define SK_INV_REG      "(1757): Invalid syscheck registry entry: '%s'."
 #define SK_REG_OPEN     "(1758): Unable to open registry key: '%s'."
+#define INV_WDATA_PAR   "Invalid parameter type (%ld) for '%s'."
 
 /* analysisd */
 #define FTS_LIST_ERROR   "(1260): Error initiating FTS list"
@@ -145,7 +146,7 @@
 
 /* Active Response */
 #define AR_CMD_MISS     "(1280): Missing command options. " \
-                        "You must specify a 'name', 'executable' and 'expect'."
+                        "You must specify a 'name' and 'executable'."
 #define AR_MISS         "(1281): Missing options in the active response " \
                         "configuration. "
 #define ARQ_ERROR       "(1301): Unable to connect to active response queue."
@@ -183,6 +184,12 @@
 #define INV_MULTILOG    "(1953): Invalid DJB multilog file: '%s'."
 #define MISS_SOCK_NAME  "(1954): Missing field 'name' for socket."
 #define MISS_SOCK_LOC   "(1955): Missing field 'location' for socket."
+#define REM_ERROR       "(1956): Error removing '%s' file."
+#define NEW_GLOB_FILE   "(1957): New file that matches the '%s' pattern: '%s'."
+#define DUP_FILE        "(1958): Log file '%s' is duplicated."
+#define FORGET_FILE     "(1959): File '%s' does not exist. Forgetting."
+#define FILE_LIMIT      "(1960): File limit has been reached (%d). Please reduce the number of files or increase \"logcollector.max_files\"."
+#define CURRENT_FILES   "(1961): Files being monitored: %i/%i."
 
 
 /* Encryption/auth errors */
@@ -231,7 +238,7 @@
 
 /* Agent errors */
 #define AG_WAIT_SERVER  "(4101): Waiting for server reply (not started). Tried: '%s'."
-#define AG_CONNECTED    "(4102): Connected to the server (%s:%d)."
+#define AG_CONNECTED    "(4102): Connected to the server (%s:%d/%s)."
 #define AG_USINGIP      "(4103): Server IP address already set. Trying that before the hostname."
 #define AG_INV_HOST     "(4104): Invalid hostname: '%s'."
 #define AG_INV_IP       "(4105): No valid server IP found."
@@ -290,8 +297,7 @@
 #define VU_AG_CHECK_ERR             "(5411): Agent vulnerabilities could not be checked."
 #define VU_TABLE_ERROR              "(5412): Table %s is not available."
 #define VU_PACKAGE_TABLE_ERROR      "(5414): The packages table for agent %s could not be created."
-#define VU_TIMESTAMP_LABEL_ERROR    "(5416): Timestamp label has not been found in the first %i fetches"
-#define VU_DB_TIMESTAMP_OVAL_ERROR  "(5417): Stored timestamp could not be compared. %s OVAL will continue to be downloaded."
+#define VU_DB_TIMESTAMP_OVAL_ERROR  "(5417): Stored timestamp could not be compared. %s OVAL will continue updating."
 #define VU_SSL_LIBRARY_ERROR        "(5418): Could not initialize the OpenSSL library."
 #define VU_SSL_CREATE_ERROR         "(5419): The SSL structure could not be created."
 #define VU_SSL_CONTEXT_ERROR        "(5420): Unable to create a new SSL context."
@@ -308,7 +314,7 @@
 #define VU_SYSC_SCAN_REQUEST_ERROR  "(5431): Last Syscollector scan from the agent %s could not be requested."
 #define VU_HTTP_HEADER_ERROR        "(5432): Invalid HTTP header."
 #define VU_PACKAGE_RECOG_ERROR      "(5433): The package could not be recognized in '%s'."
-#define VU_NO_SYSC_SCANS            "(5434): No Syscollector scans found for agent %s, so their vulnerabilities will not be checked."
+#define VU_NO_SYSC_SCANS            "(5434): No package inventory found for agent %s, so their vulnerabilities will not be checked."
 #define VU_GLOBALDB_OPEN_ERROR      "(5435): Could not open global_db."
 #define VU_REPORT_ERROR             "(5436): The agent %s vulnerabilities could not be reported."
 #define VU_UPDATE_RETRY             "(5437): Failed when updating '%s %s' database. Retrying in %lu seconds..."

@@ -34,7 +34,10 @@ is_rhel_le_5() {
 AUTHOR="Wazuh Inc."
 USE_JSON=false
 INITCONF="/etc/ossec-init.conf"
-DAEMONS="ossec-monitord ossec-logcollector ossec-remoted ossec-syscheckd ossec-analysisd ossec-maild ossec-execd wazuh-modulesd wazuh-db ${DB_DAEMON} ${CSYSLOG_DAEMON} ${AGENTLESS_DAEMON} ${INTEGRATOR_DAEMON} ${AUTH_DAEMON}"
+DAEMONS="wazuh-modulesd ossec-monitord ossec-logcollector ossec-remoted ossec-syscheckd ossec-analysisd ossec-maild ossec-execd wazuh-db ${DB_DAEMON} ${CSYSLOG_DAEMON} ${AGENTLESS_DAEMON} ${INTEGRATOR_DAEMON} ${AUTH_DAEMON}"
+
+# Reverse order of daemons
+SDAEMONS=$(echo $DAEMONS | awk '{ for (i=NF; i>1; i--) printf("%s ",$i); print $1; }')
 
 if ! is_rhel_le_5
 then
@@ -259,8 +262,6 @@ testconfig()
 # Start function
 start()
 {
-    # Reverse order of daemons
-    SDAEMONS=$(echo $DAEMONS | awk '{ for (i=NF; i>1; i--) printf("%s ",$i); print $1; }')
     incompatible=false
 
     if [ $USE_JSON = false ]; then
@@ -287,6 +288,10 @@ start()
 
     checkpid;
 
+    # Delete all files in temporary folder
+    TO_DELETE="$DIR/tmp/*"
+    rm -f $TO_DELETE
+
     # We actually start them now.
     first=true
     if [ $USE_JSON = true ]; then
@@ -298,6 +303,19 @@ start()
              grep "<email_notification>no<" ${DIR}/etc/ossec.conf >/dev/null 2>&1
              if [ $? = 0 ]; then
                  continue
+             fi
+        fi
+        ## If wazuh-clusterd is disabled, don't try to start it.
+        if [ X"$i" = "Xwazuh-clusterd" ]; then
+             start_config="$(grep -n "<cluster>" ${DIR}/etc/ossec.conf | cut -d':' -f 1)"
+             end_config="$(grep -n "</cluster>" ${DIR}/etc/ossec.conf | cut -d':' -f 1)"
+             if [ -n "${start_config}" ] && [ -n "${end_config}" ]; then
+                sed -n "${start_config},${end_config}p" ${DIR}/etc/ossec.conf | grep "<disabled>yes" >/dev/null 2>&1
+                if [ $? = 0 ]; then
+                    continue
+                fi
+             else
+                continue
              fi
         fi
         if [ $USE_JSON = true ] && [ $first = false ]; then

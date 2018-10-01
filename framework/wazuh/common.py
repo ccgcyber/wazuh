@@ -70,12 +70,15 @@ def set_paths_based_on_ossec(o_path='/var/ossec'):
     global ARQUEUE
     ARQUEUE = "{0}/queue/alerts/ar".format(ossec_path)
 
+    global EXECQ
+    EXECQ = "{0}/queue/alerts/execq".format(ossec_path)
+
     # Socket
     global AUTHD_SOCKET
     AUTHD_SOCKET = "{0}/queue/ossec/auth".format(ossec_path)
 
 # Agent upgrading variables
-wpk_repo_url = "https://packages.wazuh.com/wpk/"
+wpk_repo_url = "packages.wazuh.com/wpk/"
 
 wpk_chunk_size = 512
 
@@ -90,6 +93,8 @@ agent_info_sleep = 2 # Seconds between retries
 
 # Common variables
 database_limit = 500
+maximum_database_limit = 1000
+limit_seconds = 1800 # 600*3
 
 ossec_uid = getpwnam("ossec").pw_uid
 ossec_gid = getgrnam("ossec").gr_gid

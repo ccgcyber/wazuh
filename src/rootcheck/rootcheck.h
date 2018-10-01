@@ -15,8 +15,8 @@
 extern rkconfig rootcheck;
 
 /* Output types */
-#define QUEUE   101
-#define SYSLOG  102
+#define QUEUE       101
+#define SYSLOG_RK   102
 
 /* Maximum files to search on the whole system */
 #define MAX_RK_SYS      512
@@ -85,10 +85,16 @@ int notify_rk(int rk_type, const char *msg);
 /* Start the rootcheck externally */
 int rootcheck_init(int test_config);
 
+/* Connect Rootcheck queue */
+void rootcheck_connect();
+
 /* run_rk_check: checks the integrity of the files against the
  * saved database
  */
 void run_rk_check(void);
+
+/* Rootcheck thread */
+void * w_rootcheck_thread(__attribute__((unused)) void * args);
 
 /*** Plugins prototypes ***/
 void check_rc_files(const char *basedir, FILE *fp);
@@ -126,4 +132,3 @@ typedef struct _Proc_Info {
 } Proc_Info;
 
 #endif /* __ROOTCHECK_H */
-

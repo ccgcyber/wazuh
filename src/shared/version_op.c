@@ -15,7 +15,7 @@
 os_info *get_win_version()
 {
     os_info *info;
-
+    unsigned int i;
     char temp[1024];
     DWORD dwRet;
     HKEY RegistryKey;
@@ -130,7 +130,7 @@ os_info *get_win_version()
                 char ** parts = OS_StrBreak('.', winver, 2);
                 info->os_major = strdup(parts[0]);
                 info->os_minor = strdup(parts[1]);
-                for (int i = 0; parts[i]; i++){
+                for (i = 0; parts[i]; i++){
                     free(parts[i]);
                 }
                 free(parts);
@@ -650,6 +650,9 @@ os_info *get_unix_version()
                 snprintf(info->os_version, len, "%s (%s)", info->os_version, info->os_codename);
             }
         }
+    } else {
+        // Empty version
+        info->os_version = strdup("0.0");
     }
 
     return info;

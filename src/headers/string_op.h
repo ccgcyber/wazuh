@@ -12,6 +12,21 @@
 
 #include <external/cJSON/cJSON.h>
 
+#ifdef WIN32
+#include <winsock2.h>
+#include <windows.h>
+
+#ifndef WC_ERR_INVALID_CHARS
+#define WC_ERR_INVALID_CHARS 0x80
+#endif
+
+/* converts a Windows format string to char* */
+char *convert_windows_string(LPCWSTR string);
+#endif
+
+// Convert string to lowercase
+#define str_lowercase(str_lc) { char *x = str_lc; while (*x != '\0') { *x = tolower(*x); x++; } }
+
 /* Trim the CR and/or LF from the last positions of a string */
 void os_trimcrlf(char *str) __attribute__((nonnull));
 
@@ -41,6 +56,9 @@ char* filter_special_chars(const char *string);
 
 // Replace substrings
 char * wstr_replace(const char * string, const char * search, const char * replace);
+
+// Locate first occurrence of non escaped character in string
+char * wstr_chr(char * str, int character);
 
 // Free string array
 void free_strarray(char ** array);

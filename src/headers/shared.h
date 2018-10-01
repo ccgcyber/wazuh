@@ -40,6 +40,7 @@
 #include <sys/time.h>
 #include <sys/param.h>
 #include <stdint.h>
+#include <inttypes.h>
 
 #ifndef WIN32
 #include <sys/wait.h>
@@ -213,6 +214,7 @@ extern const char *__local_name;
 #include "randombytes.h"
 #include "labels_op.h"
 #include "time_op.h"
+#include "vector_op.h"
 #include "exec_op.h"
 #include "json_op.h"
 #include "notify_op.h"

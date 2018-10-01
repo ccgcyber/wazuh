@@ -76,6 +76,7 @@ int main(int argc, char **argv)
     int test_config = 0, run_foreground = 0;
     gid_t gid;
     int m_queue = 0;
+    int debug_level = 0;
 
     const char *group = GROUPGLOBAL;
     const char *cfg = DEFAULTCPATH;
@@ -92,6 +93,7 @@ int main(int argc, char **argv)
                 help_execd();
                 break;
             case 'd':
+                debug_level = 1;
                 nowDebug();
                 break;
             case 'f':
@@ -115,6 +117,15 @@ int main(int argc, char **argv)
             default:
                 help_execd();
                 break;
+        }
+    }
+
+    if (debug_level == 0) {
+        /* Get debug level */
+        debug_level = getDefine_Int("execd", "debug", 0, 2);
+        while (debug_level != 0) {
+            nowDebug();
+            debug_level--;
         }
     }
 
@@ -159,7 +170,9 @@ int main(int argc, char **argv)
         merror_exit(PID_ERROR);
     }
 
+#ifdef CLIENT
     CheckExecConfig();
+#endif
 
     /* Start exec queue */
     if ((m_queue = StartMQ(EXECQUEUEPATH, READ)) < 0) {
@@ -334,11 +347,16 @@ static void ExecdStart(int q)
         /* Zero the name */
         tmp_msg = strchr(buffer, ' ');
         if (!tmp_msg) {
-            mwarn(EXECD_INV_MSG, buffer);
-            continue;
+            if (name[0] != '!') {
+                mwarn(EXECD_INV_MSG, buffer);
+                continue;
+            } else {
+                tmp_msg = buffer + strlen(buffer);
+            }
+        } else {
+            *tmp_msg = '\0';
+            tmp_msg++;
         }
-        *tmp_msg = '\0';
-        tmp_msg++;
 
         /* Get the command to execute (valid name) */
         command = GetCommandbyName(name, &timeout_value);
@@ -369,8 +387,7 @@ static void ExecdStart(int q)
         timeout_args[2] = NULL;
 
         /* Get the arguments */
-        i = 2;
-        while (i < (MAX_ARGS - 1)) {
+        for (i = 2; *tmp_msg && i < (MAX_ARGS - 1); i++) {
             cmd_args[i] = tmp_msg;
             cmd_args[i + 1] = NULL;
 
@@ -385,8 +402,6 @@ static void ExecdStart(int q)
 
             timeout_args[i] = strdup(cmd_args[i]);
             timeout_args[i + 1] = NULL;
-
-            i++;
         }
 
         /* Check if this command was already executed */
@@ -394,9 +409,9 @@ static void ExecdStart(int q)
         added_before = 0;
 
         /* Check for the username and IP argument */
-        if (!timeout_args[2] || !timeout_args[3]) {
+        if (name[0] != '!' && (!timeout_args[2] || !timeout_args[3])) {
             added_before = 1;
-            merror("Invalid number of arguments.");
+            merror("Invalid number of arguments (%s).", name);
         }
 
         while (timeout_node) {
